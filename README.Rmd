@@ -1,0 +1,28 @@
+---
+output: github_document
+bibliography: [references.bib]
+nocite: |
+  @Spiegelman2005-Easy, @Williamson2013-Logbinomial
+csl: aje.csl
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+# Easy R Code for Convergent Log-Linear Models
+
+## Introduction
+
+Introduction.
+
+## Example
+
+Example data, procedure, etc.
+
+## References
