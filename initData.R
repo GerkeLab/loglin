@@ -26,8 +26,21 @@ fit3 <- lme4::glmer(cancer ~ PSA + famhx + race + (1 | id),
 # log binomial fit with starting values from Poisson
 # this should work with coef(fit2) in the start param, but that throws errors
 fit4 <- glm(cancer ~ PSA + famhx + race, data = dat,
-            family = binomial(link = "log"),
-            start = c(-1.87, 0.55, 0.322, 0.614))
+            family = binomial(link = "log"), 
+            start = c(-1.867, 0.5517, 0.3220, 0.6142))
+# per a suggestion from https://stats.stackexchange.com/questions/105633/what-to-do-when-a-log-binomial-models-convergence-fails
+# replaced 1 in the pmin() function with .9999 to avoid NA/Inf warnings
+negLogLik <- function(b) {
+  risk <- pmin(.9999, exp(as.matrix(cbind(1, dat[,2:4])) %*% b))
+  -sum(dbinom(dat$cancer, 1, risk, log=TRUE))
+}
+fit <- nlm(negLogLik, p=c(log(mean(dat$cancer)), 0,0,0), hessian=TRUE)
+# but careful, it's pretty dependent on starting values
+fit <- nlm(negLogLik, p=coef(fit2), hessian=TRUE)
+# fiddling with tolerances may help (but not much the way it's written below)
+fit <- nlm(negLogLik, p=coef(fit2), hessian=TRUE, gradtol = 1e-12, steptol = 1e-11)
+fit <- nlm(negLogLik, p=c(log(mean(dat$cancer)), 0,0,0), hessian=TRUE, gradtol = 1e-12, steptol = 1e-11)
+# next steps: can swapping nlm() for optim() help?
 
 #### Example from Spiegelman and Hertzmark AJE 2005
 dat <- tibble(id = 1:192,
