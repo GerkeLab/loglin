@@ -42,6 +42,12 @@ fit <- nlm(negLogLik, p=coef(fit2), hessian=TRUE, gradtol = 1e-12, steptol = 1e-
 fit <- nlm(negLogLik, p=c(log(mean(dat$cancer)), 0,0,0), hessian=TRUE, gradtol = 1e-12, steptol = 1e-11)
 # next steps: can swapping nlm() for optim() help?
 
+# try logbin
+library(logbin)
+fit <- logbin(cancer ~ PSA + famhx + race, data = dat)
+# doesn't compute cov matrix to enable CI estimation!
+# we could use exact-type limits according to Agresti and then simulate coverage
+
 #### Example from Spiegelman and Hertzmark AJE 2005
 dat <- tibble(id = 1:192,
               death = c(rep(1, 54), rep(0, 138)),
