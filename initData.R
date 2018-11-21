@@ -46,7 +46,8 @@ fit <- nlm(negLogLik, p=c(log(mean(dat$cancer)), 0,0,0), hessian=TRUE, gradtol =
 library(logbin)
 fit <- logbin(cancer ~ PSA + famhx + race, data = dat)
 # doesn't compute cov matrix to enable CI estimation!
-# we could use exact-type limits according to Agresti and then simulate coverage
+# we could use inverted test-based limits according to Agresti and then simulate coverage
+# review of test-based CIs: http://statmath.wu.ac.at/research/talks/resources/slidesagresti_confidence.pdf
 
 #### Example from Spiegelman and Hertzmark AJE 2005
 dat <- tibble(id = 1:192,
