@@ -227,6 +227,8 @@ library(logbin)
 (fit <- logbin(cancer ~ PSA + famhx + race, data = dat))
 ```
 
+    ## Warning: nplbin: fitted probabilities numerically 1 occurred
+
     ## 
     ## Call:  logbin(formula = cancer ~ PSA + famhx + race, data = dat)
     ## 
@@ -243,6 +245,86 @@ It doesn’t compute cov matrix to enable CI estimation\!
 We could use inverted test-based limits [according to
 Agresti](http://statmath.wu.ac.at/research/talks/resources/slidesagresti_confidence.pdf)
 and then simulate coverage review of test-based CIs.
+
+### Bootstrapping `logbin`
+
+``` r
+logbin_coef <- function(.data, i, formula, ...) {
+  fit <- logbin::logbin(formula, data = .data[i, ], ...)
+  coef(fit)
+}
+
+fit_boot <- boot::boot(dat, logbin_coef, 1000, 
+                       formula = cancer ~ PSA + famhx + race,
+                       method = "em", accelerate = "squarem",
+                       #method = "cem", accelerate = "squarem", #<< might be better, not as fast
+                       parallel = "multicore", ncpus = 6)
+```
+
+    ## Warning: nplbin: fitted probabilities numerically 1 occurred
+
+``` r
+fit_boot
+```
+
+    ## 
+    ## ORDINARY NONPARAMETRIC BOOTSTRAP
+    ## 
+    ## 
+    ## Call:
+    ## boot::boot(data = dat, statistic = logbin_coef, R = 1000, formula = cancer ~ 
+    ##     PSA + famhx + race, method = "em", accelerate = "squarem", 
+    ##     parallel = "multicore", ncpus = 6)
+    ## 
+    ## 
+    ## Bootstrap Statistics :
+    ##          original       bias    std. error
+    ## t1* -1.717007e+00  0.002567397  0.07582802
+    ## t2*  3.677106e-01  0.001701032  0.03268923
+    ## t3*  6.994898e-08  0.007980613  0.05205506
+    ## t4*  5.766996e-01 -0.009155538  0.10292334
+
+``` r
+boot::boot.ci(fit_boot)
+```
+
+    ## BOOTSTRAP CONFIDENCE INTERVAL CALCULATIONS
+    ## Based on 1000 bootstrap replicates
+    ## 
+    ## CALL : 
+    ## boot::boot.ci(boot.out = fit_boot)
+    ## 
+    ## Intervals : 
+    ## Level      Normal              Basic             Studentized     
+    ## 95%   (-1.868, -1.571 )   (-1.858, -1.571 )   (-1.864, -1.572 )  
+    ## 
+    ## Level     Percentile            BCa          
+    ## 95%   (-1.863, -1.576 )   (-1.883, -1.589 )  
+    ## Calculations and Intervals on Original Scale
+
+<details>
+
+<summary>Speed Test</summary>
+
+``` r
+bench::mark(
+  "em" = logbin(cancer ~ PSA + famhx + race, data = dat, method = "em"),
+  "cem" = logbin(cancer ~ PSA + famhx + race, data = dat, method = "cem"),
+  "cem_acc" = logbin(cancer ~ PSA + famhx + race, data = dat, method = "cem", accelerate = "squarem"),
+  "em_acc" = logbin(cancer ~ PSA + famhx + race, data = dat, method = "em", accelerate = "squarem"),
+  check = FALSE, 
+  iterations = 25
+)
+# # A tibble: 4 x 14
+# expression      min     mean   median     max `itr/sec` mem_alloc  n_gc n_itr total_time result
+# <chr>      <bch:tm> <bch:tm> <bch:tm> <bch:t>     <dbl> <bch:byt> <dbl> <int>   <bch:tm> <list>
+# 1 em         668.03ms 696.85ms    679ms   1.01s     1.44      465MB   133    25     17.42s <S3: …
+# 2 cem           3.08s    3.21s    3.18s   3.51s     0.312     1.7GB   503    25      1.34m <S3: …
+# 3 cem_acc       1.57s    1.83s    1.69s   4.04s     0.547   680.5MB   200    25     45.74s <S3: …
+# 4 em_acc      82.94ms  97.92ms  98.02ms 114.3ms    10.2      46.9MB    15    25      2.45s <S3: …
+```
+
+</details>
 
 ## Example from Spiegelman and Hertzmark AJE 2005
 
