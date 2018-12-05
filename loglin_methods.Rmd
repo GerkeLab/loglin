@@ -1,0 +1,154 @@
+---
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+```
+
+```{r library}
+library(tidyverse)
+```
+
+```{r setup-data}
+n <- 1000
+set.seed(8675309)
+dat <- tibble(
+  id = 1:n,
+  PSA = rexp(n, 2),
+  famhx = rbinom(n, size = 1, prob = .05),
+  race = rbinom(n, size = 1, prob = .4)
+) %>%
+  add_column(
+    cancer = rbinom(
+      n,
+      size = 1,
+      prob = 1 / (1 + exp(2 - .$PSA - .$famhx - .$race))
+    )
+  )
+```
+
+### Log binomial fit
+
+```{r fit-log-binom-glm, error=TRUE}
+glm(cancer ~ PSA + famhx + race, data = dat, family = binomial(link = "log"))
+```
+
+### Poisson fit
+
+```{r fit-poisson}
+fit2 <- glm(cancer ~ PSA + famhx + race, data = dat, family = poisson)
+fit2
+```
+
+### Poisson fit with lme4
+
+```{r fit-poisson-lme4}
+fit3 <- lme4::glmer(cancer ~ PSA + famhx + race + (1 | id),
+  data = dat, family = poisson
+)
+fit3
+```
+
+### Log binomial fit with starting values from Poisson
+
+In theory, this should work with `coef(fit2)` in the start param, but that throws an error because these coefficients are either outside of or too close to the feasible region boundary where coefficients are bound to `[0, 1]`.
+
+```{r log-binom-start-poisson-error, error = TRUE}
+coef(fit2)
+fit4 <- glm(cancer ~ PSA + famhx + race,
+  data = dat,
+  family = binomial(link = "log"),
+  start = coef(fit2)
+)
+```
+
+## negLogLik
+
+Per a suggestion from 
+[stats.stackexchange](https://stats.stackexchange.com/questions/105633/what-to-do-when-a-log-binomial-models-convergence-fails),
+but replacing 1 in the `pmin()` function with .9999 to avoid `NA`/`Inf` warnings.
+
+```{r negLogLik}
+# https://stats.stackexchange.com/a/321407/20236
+negLogLik <- function(b) {
+  risk <- pmin(.9999, exp(as.matrix(cbind(1, dat[, 2:4])) %*% b))
+  -sum(dbinom(dat$cancer, 1, risk, log = TRUE))
+}
+(fit <- nlm(negLogLik, p = c(log(mean(dat$cancer)), 0, 0, 0), hessian = TRUE))
+```
+
+but careful, it's pretty dependent on starting values
+
+```{r negLogLik-2}
+(fit <- nlm(negLogLik, p = coef(fit2), hessian = TRUE))
+```
+
+fiddling with tolerances may help (but not much the way it's written below)
+
+```{r negLogLik-3}
+(fit <- nlm(negLogLik, p = coef(fit2), hessian = TRUE, gradtol = 1e-12, steptol = 1e-11))
+(fit <- nlm(negLogLik, p = c(log(mean(dat$cancer)), 0, 0, 0), hessian = TRUE, gradtol = 1e-12, steptol = 1e-11))
+```
+
+next steps: can swapping nlm() for optim() help?
+
+
+## Logbin
+
+```{r logbin}
+library(logbin)
+(fit <- logbin(cancer ~ PSA + famhx + race, data = dat))
+```
+
+It doesn't compute cov matrix to enable CI estimation!
+
+We could use inverted test-based limits 
+[according to Agresti](http://statmath.wu.ac.at/research/talks/resources/slidesagresti_confidence.pdf) 
+and then simulate coverage review of test-based CIs.
+
+## Example from Spiegelman and Hertzmark AJE 2005
+
+```{r example-spiegelman-aje-2005}
+dat <- tibble(
+  id = 1:192,
+  death = c(rep(1, 54), rep(0, 138)),
+  stage = c(
+    rep("Stage I", 7), rep("Stage II", 26), rep("Stage III", 21),
+    rep("Stage I", 60), rep("Stage II", 70), rep("Stage III", 8)
+  ),
+  receptor = c(
+    rep("Low", 2), rep("High", 5), rep("Low", 9), rep("High", 17),
+    rep("Low", 12), rep("High", 9), rep("Low", 10), rep("High", 50),
+    rep("Low", 13), rep("High", 57), rep("Low", 2), rep("High", 6)
+  )
+)
+dat
+```
+
+log binomial fails to converge
+
+```{r ex-spiegelman-log-bin-fails, error = TRUE}
+glm(death ~ stage + receptor, data = dat, family = binomial(link = "log"))
+```
+
+Poisson converges
+
+```{r ex-spiegelman-poisson}
+(fit <- glm(death ~ stage + receptor, data = dat, family = poisson))
+exp(coef(fit)) #' estimates match https://academic.oup.com/aje/article/162/3/199/171116
+```
+
+lme4 Poisson
+
+```{r ex-spiegelman-poisson-lme4}
+(fit3 <- lme4::glmer(death ~ as.factor(stage) + receptor + (1 | id), data = dat, family = poisson))
+```
+
+using Poisson as starting values
+
+```{r ex-spiegelman-poisson-start}
+(fit2 <- glm(death ~ as.factor(stage) + receptor, data = dat, family = binomial(link = "log"), start = c(-2.3, .92, 1.78, .489)))
+exp(coef(fit2))
+```
+
